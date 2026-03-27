@@ -17,7 +17,6 @@ import '../models/building_type.dart';
 import '../widgets/resource_bar.dart';
 import '../widgets/city_grid.dart';
 import '../widgets/building_selector.dart';
-import '../widgets/tick_indicator.dart';
 import '../widgets/upgrade_panel.dart';
 import 'statistics_screen.dart';
 import 'achievements_screen.dart';
@@ -193,7 +192,6 @@ class _GameScreenState extends State<GameScreen> {
       body: Column(
         children: [
           ResourceBar(resources: r),
-          const TickIndicator(),
           _UpkeepStatusLine(
               netIncome: netIncome, totalUpkeep: totalUpkeep),
 
