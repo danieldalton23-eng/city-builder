@@ -1,13 +1,11 @@
 // ============================================================
-// game_screen.dart
+// game_screen.dart  (redesigned)
 // Primary game screen. Assembles resource bar, city grid,
-// tick indicator, building selector, and upgrade panel.
+// building selector / upgrade panel, and crisis banners.
 //
-// New in this version:
-//   • AppBar overflow menu: Statistics, Achievements, Save Slots
-//   • Achievement toast overlay (pops up on unlock)
-//   • Upkeep summary status line
-//   • Crisis warning banners
+// Uses the AppColors / AppText / AppRadius design system.
+// Crisis banners slide in with AnimatedSize + AnimatedOpacity.
+// Achievement toasts use the modern SnackBar style.
 // ============================================================
 
 import 'package:flutter/material.dart';
@@ -18,6 +16,7 @@ import '../widgets/resource_bar.dart';
 import '../widgets/city_grid.dart';
 import '../widgets/building_selector.dart';
 import '../widgets/upgrade_panel.dart';
+import '../theme/app_theme.dart';
 import 'statistics_screen.dart';
 import 'achievements_screen.dart';
 import 'slot_picker_screen.dart';
@@ -30,92 +29,24 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> {
-  // Track the last pending achievement count to trigger toasts.
   int _lastPendingCount = 0;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _checkForAchievementToast();
-  }
-
-  void _checkForAchievementToast() {
-    final provider = context.read<GameProvider>();
-    if (provider.pendingAchievements.length > _lastPendingCount) {
-      _lastPendingCount = provider.pendingAchievements.length;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showAchievementToast(provider);
-      });
-    }
-  }
-
-  void _showAchievementToast(GameProvider provider) {
-    if (provider.pendingAchievements.isEmpty) return;
-    final achievement = provider.pendingAchievements.first;
-    provider.consumePendingAchievement();
-    _lastPendingCount =
-        (_lastPendingCount - 1).clamp(0, 999);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 4),
-        backgroundColor: const Color(0xFF1A237E),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
-        content: Row(
-          children: [
-            Text(achievement.emoji,
-                style: const TextStyle(fontSize: 24)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '🏆 Achievement Unlocked!',
-                    style: TextStyle(
-                        color: Colors.amber.shade300,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    achievement.title,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    '+${achievement.creditReward} 💰 credits',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GameProvider>();
 
-    // Check for new achievements on every rebuild.
+    // Fire achievement toasts on every rebuild that has new ones.
     if (provider.pendingAchievements.length > _lastPendingCount) {
-      WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _showAchievementToast(provider));
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _showAchievementToast(provider));
       _lastPendingCount = provider.pendingAchievements.length;
     }
 
     if (provider.isLoading) {
       return const Scaffold(
-        backgroundColor: Color(0xFF121212),
+        backgroundColor: AppColors.background,
         body: Center(
-          child: CircularProgressIndicator(color: Colors.white),
+          child: CircularProgressIndicator(color: AppColors.selected),
         ),
       );
     }
@@ -123,7 +54,7 @@ class _GameScreenState extends State<GameScreen> {
     final r = provider.resources;
     final selectedTile = provider.selectedTile;
 
-    // Calculate upkeep for status line.
+    // Net income calculation for status line.
     int totalUpkeep = 0;
     for (final tile in provider.state.tiles) {
       if (tile.building != BuildingType.empty) {
@@ -134,111 +65,57 @@ class _GameScreenState extends State<GameScreen> {
     final int netIncome = baseIncome - totalUpkeep;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1B1B2F),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0D1A),
-        elevation: 0,
-        title: Text(
-          '🏙️ CityBuilder  •  Slot ${provider.activeSlot + 1}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.menu, color: Colors.white70),
-            color: const Color(0xFF1E1E2E),
-            onSelected: (value) => _handleMenu(context, value, provider),
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'stats',
-                child: Row(children: [
-                  Text('📊 ', style: TextStyle(fontSize: 16)),
-                  Text('Statistics',
-                      style: TextStyle(color: Colors.white)),
-                ]),
-              ),
-              const PopupMenuItem(
-                value: 'achievements',
-                child: Row(children: [
-                  Text('🏆 ', style: TextStyle(fontSize: 16)),
-                  Text('Achievements',
-                      style: TextStyle(color: Colors.white)),
-                ]),
-              ),
-              const PopupMenuItem(
-                value: 'slots',
-                child: Row(children: [
-                  Text('💾 ', style: TextStyle(fontSize: 16)),
-                  Text('Save Slots',
-                      style: TextStyle(color: Colors.white)),
-                ]),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'new_game',
-                child: Row(children: [
-                  Text('🔄 ', style: TextStyle(fontSize: 16)),
-                  Text('New Game',
-                      style: TextStyle(color: Colors.redAccent)),
-                ]),
-              ),
-            ],
-          ),
-        ],
-      ),
+      backgroundColor: AppColors.background,
+      appBar: _buildAppBar(context, provider),
       body: Column(
         children: [
+          // ── Resource bar ────────────────────────────────────
           ResourceBar(resources: r),
-          _UpkeepStatusLine(
-              netIncome: netIncome, totalUpkeep: totalUpkeep),
 
-          // Crisis banners.
-          if (r.isFoodCrisis)
-            _CrisisBanner(
-              message:
-                  '🌾 FOOD SHORTAGE — Population is starving and shrinking!',
-              color: Colors.red.shade900,
-            ),
-          if (r.isPowerCrisis)
-            _CrisisBanner(
-              message:
-                  '⚡ POWER OUTAGE — Houses offline, population decreasing!',
-              color: Colors.orange.shade900,
-            ),
+          // ── Net income strip ────────────────────────────────
+          _IncomeStrip(netIncome: netIncome, totalUpkeep: totalUpkeep),
 
-          // Feedback message.
+          // ── Crisis banners (animated slide-in) ──────────────
+          _AnimatedCrisisBanner(
+            visible: r.isFoodCrisis,
+            icon: '🌾',
+            message: 'FOOD SHORTAGE — Population is starving!',
+            color: AppColors.danger,
+          ),
+          _AnimatedCrisisBanner(
+            visible: r.isPowerCrisis,
+            icon: '⚡',
+            message: 'POWER OUTAGE — Houses offline!',
+            color: AppColors.warning,
+          ),
+
+          // ── Feedback message ────────────────────────────────
           if (provider.lastMessage != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 6),
-              color: const Color(0xFF37474F),
-              child: Text(
-                provider.lastMessage!,
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(color: Colors.white, fontSize: 13),
-              ),
-            ),
+            _FeedbackBanner(message: provider.lastMessage!),
 
-          // City grid.
+          // ── City grid ───────────────────────────────────────
           Expanded(
             child: Container(
-              color: const Color(0xFF263238),
+              color: AppColors.mapBackground,
               child: const Center(child: CityGrid()),
             ),
           ),
 
-          // Bottom panel: upgrade panel OR building selector.
+          // ── Bottom panel: upgrade OR building selector ───────
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, anim) => SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.15),
+                end: Offset.zero,
+              ).animate(anim),
+              child: FadeTransition(opacity: anim, child: child),
+            ),
             child: selectedTile != null
                 ? UpgradePanel(
-                    key: ValueKey(
-                        '${selectedTile.row}_${selectedTile.col}'),
+                    key: ValueKey('${selectedTile.row}_${selectedTile.col}'),
                     tile: selectedTile,
                   )
                 : const BuildingSelector(key: ValueKey('selector')),
@@ -248,6 +125,140 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  // ── AppBar ─────────────────────────────────────────────────
+
+  PreferredSizeWidget _buildAppBar(
+      BuildContext context, GameProvider provider) {
+    return AppBar(
+      backgroundColor: AppColors.surface,
+      elevation: 0,
+      titleSpacing: AppSpacing.md,
+      title: Row(
+        children: [
+          const Text('🏙️', style: TextStyle(fontSize: 18)),
+          const SizedBox(width: 8),
+          Text(
+            'CityBuilder',
+            style: AppText.heading.copyWith(color: AppColors.textPrimary),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.selected.withOpacity(0.15),
+              borderRadius: AppRadius.pillRadius,
+              border: Border.all(
+                  color: AppColors.selected.withOpacity(0.3), width: 1),
+            ),
+            child: Text(
+              'Slot ${provider.activeSlot + 1}',
+              style: AppText.caption.copyWith(color: AppColors.selected),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, color: AppColors.textMuted),
+          color: AppColors.surfaceLight,
+          shape: RoundedRectangleBorder(
+              borderRadius: AppRadius.cardRadius),
+          onSelected: (v) => _handleMenu(context, v, provider),
+          itemBuilder: (_) => [
+            _menuItem('stats', '📊', 'Statistics', AppColors.textPrimary),
+            _menuItem('achievements', '🏆', 'Achievements', AppColors.textPrimary),
+            _menuItem('slots', '💾', 'Save Slots', AppColors.textPrimary),
+            const PopupMenuDivider(),
+            _menuItem('new_game', '🔄', 'New Game', AppColors.danger),
+          ],
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(height: 1, color: AppColors.border),
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _menuItem(
+      String value, String emoji, String label, Color color) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 10),
+          Text(label,
+              style: AppText.body.copyWith(color: color)),
+        ],
+      ),
+    );
+  }
+
+  // ── Achievement toast ──────────────────────────────────────
+
+  void _showAchievementToast(GameProvider provider) {
+    if (provider.pendingAchievements.isEmpty) return;
+    final a = provider.pendingAchievements.first;
+    provider.consumePendingAchievement();
+    _lastPendingCount = (_lastPendingCount - 1).clamp(0, 999);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 4),
+        backgroundColor: AppColors.surface,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(AppSpacing.md),
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.cardRadius,
+          side: BorderSide(
+              color: AppColors.credits.withOpacity(0.4), width: 1),
+        ),
+        content: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.credits.withOpacity(0.15),
+                borderRadius: AppRadius.cardRadius,
+              ),
+              child: Center(
+                child: Text(a.emoji,
+                    style: const TextStyle(fontSize: 20)),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '🏆 Achievement Unlocked',
+                    style: AppText.caption.copyWith(
+                        color: AppColors.credits,
+                        fontWeight: FontWeight.w700),
+                  ),
+                  Text(a.title,
+                      style: AppText.labelBold
+                          .copyWith(color: AppColors.textPrimary)),
+                  Text(
+                    '+${a.creditReward} 💰 credits awarded',
+                    style: AppText.caption
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Menu handler ───────────────────────────────────────────
+
   void _handleMenu(
       BuildContext context, String value, GameProvider provider) {
     switch (value) {
@@ -256,16 +267,12 @@ class _GameScreenState extends State<GameScreen> {
             MaterialPageRoute(builder: (_) => const StatisticsScreen()));
         break;
       case 'achievements':
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => const AchievementsScreen()));
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AchievementsScreen()));
         break;
       case 'slots':
-        Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-                builder: (_) => const SlotPickerScreen()));
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const SlotPickerScreen()));
         break;
       case 'new_game':
         _confirmNewGame(context, provider);
@@ -277,27 +284,32 @@ class _GameScreenState extends State<GameScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2E),
-        title: const Text('New Game?',
-            style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
+        title: Text('Start New Game?',
+            style: AppText.heading.copyWith(color: AppColors.textPrimary)),
+        content: Text(
           'This will erase your current city in this slot. Are you sure?',
-          style: TextStyle(color: Colors.white70),
+          style: AppText.body.copyWith(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel',
-                style: TextStyle(color: Colors.white54)),
+            child: Text('Cancel',
+                style: AppText.body.copyWith(color: AppColors.textMuted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent),
+              backgroundColor: AppColors.danger,
+              shape: RoundedRectangleBorder(
+                  borderRadius: AppRadius.cardRadius),
+            ),
             onPressed: () {
               Navigator.of(ctx).pop();
               provider.newGame();
             },
-            child: const Text('Start Fresh'),
+            child: Text('Start Fresh',
+                style: AppText.labelBold.copyWith(color: Colors.white)),
           ),
         ],
       ),
@@ -305,65 +317,116 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
-// ── Crisis banner ──────────────────────────────────────────
+// ── Income strip ───────────────────────────────────────────────
 
-class _CrisisBanner extends StatelessWidget {
-  final String message;
-  final Color color;
-  const _CrisisBanner({required this.message, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      color: color,
-      child: Text(
-        message,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-}
-
-// ── Upkeep status line ─────────────────────────────────────
-
-class _UpkeepStatusLine extends StatelessWidget {
+class _IncomeStrip extends StatelessWidget {
   final int netIncome;
   final int totalUpkeep;
-  const _UpkeepStatusLine(
-      {required this.netIncome, required this.totalUpkeep});
+  const _IncomeStrip({required this.netIncome, required this.totalUpkeep});
 
   @override
   Widget build(BuildContext context) {
     final isNegative = netIncome < 0;
+    final netColor =
+        isNegative ? AppColors.danger : AppColors.food;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      color: const Color(0xFF0A0A18),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: 4),
+      color: AppColors.background,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            '💰 Income: +5/tick   🔧 Upkeep: -$totalUpkeep/tick   Net: ',
-            style:
-                const TextStyle(color: Colors.white38, fontSize: 10),
+            '💰 +5/tick   🔧 -$totalUpkeep/tick   Net: ',
+            style: AppText.caption.copyWith(color: AppColors.textMuted),
           ),
           Text(
             '${isNegative ? "" : "+"}$netIncome/tick',
-            style: TextStyle(
-              color: isNegative
-                  ? Colors.red.shade300
-                  : Colors.green.shade300,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
+            style: AppText.caption.copyWith(
+              color: netColor,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Animated crisis banner ─────────────────────────────────────
+
+class _AnimatedCrisisBanner extends StatelessWidget {
+  final bool visible;
+  final String icon;
+  final String message;
+  final Color color;
+
+  const _AnimatedCrisisBanner({
+    required this.visible,
+    required this.icon,
+    required this.message,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 250),
+        opacity: visible ? 1.0 : 0.0,
+        child: visible
+            ? Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm, vertical: 8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  borderRadius: AppRadius.cardRadius,
+                  border: Border.all(
+                      color: color.withOpacity(0.5), width: 1),
+                ),
+                child: Row(
+                  children: [
+                    Text(icon, style: const TextStyle(fontSize: 16)),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        message,
+                        style: AppText.labelBold.copyWith(color: color),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+// ── Feedback banner ────────────────────────────────────────────
+
+class _FeedbackBanner extends StatelessWidget {
+  final String message;
+  const _FeedbackBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: 6),
+      color: AppColors.surfaceLight,
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: AppText.caption.copyWith(color: AppColors.textSecondary),
       ),
     );
   }

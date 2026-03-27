@@ -1,14 +1,14 @@
 // ============================================================
-// slot_picker_screen.dart
-// Shown at app launch (and from the in-game menu).
-// Displays all 3 save slots with their metadata and lets the
-// player load an existing city or start a new game in any slot.
+// slot_picker_screen.dart  (redesigned)
+// Shown at app launch and from the in-game menu.
+// Uses the AppColors / AppText / AppRadius design system.
 // ============================================================
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
 import '../services/save_service.dart';
+import '../theme/app_theme.dart';
 import 'game_screen.dart';
 
 class SlotPickerScreen extends StatefulWidget {
@@ -36,10 +36,8 @@ class _SlotPickerScreenState extends State<SlotPickerScreen> {
   Future<void> _selectSlot(int slot, bool isEmpty) async {
     final provider = context.read<GameProvider>();
     if (isEmpty) {
-      // Start a fresh game in this slot.
       await provider.newGameInSlot(slot);
     } else {
-      // Load existing save.
       await provider.loadSlot(slot);
     }
     if (mounted) {
@@ -53,24 +51,29 @@ class _SlotPickerScreenState extends State<SlotPickerScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2E),
-        title: const Text('Delete Save?',
-            style: TextStyle(color: Colors.white)),
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
+        title: Text('Delete Save?',
+            style: AppText.heading.copyWith(color: AppColors.textPrimary)),
         content: Text(
           'This will permanently erase City ${slot + 1}. Are you sure?',
-          style: const TextStyle(color: Colors.white70),
+          style: AppText.body.copyWith(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: Colors.white54)),
+            child: Text('Cancel',
+                style: AppText.body.copyWith(color: AppColors.textMuted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent),
+              backgroundColor: AppColors.danger,
+              shape: RoundedRectangleBorder(
+                  borderRadius: AppRadius.cardRadius),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: Text('Delete',
+                style: AppText.labelBold.copyWith(color: Colors.white)),
           ),
         ],
       ),
@@ -84,58 +87,68 @@ class _SlotPickerScreenState extends State<SlotPickerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 40),
-            // ── Title ──────────────────────────────────────
-            const Text(
-              '🏙️',
-              style: TextStyle(fontSize: 56),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'CityBuilder',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
+            const SizedBox(height: 48),
+
+            // ── Hero icon ───────────────────────────────────
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.selected.withOpacity(0.12),
+                borderRadius: AppRadius.cardRadius,
+                border: Border.all(
+                    color: AppColors.selected.withOpacity(0.3), width: 1.5),
+              ),
+              child: const Center(
+                child: Text('🏙️', style: TextStyle(fontSize: 40)),
               ),
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Choose a save slot',
-              style: TextStyle(color: Colors.white54, fontSize: 14),
+            const SizedBox(height: 20),
+
+            // ── Title ───────────────────────────────────────
+            Text(
+              'CityBuilder',
+              style: AppText.displayLarge.copyWith(
+                color: AppColors.textPrimary,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Choose a save slot to continue',
+              style: AppText.body.copyWith(color: AppColors.textMuted),
             ),
             const SizedBox(height: 40),
 
-            // ── Slot cards ─────────────────────────────────
+            // ── Slot cards ──────────────────────────────────
             if (_loading)
               const Expanded(
                 child: Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+                  child: CircularProgressIndicator(
+                      color: AppColors.selected),
                 ),
               )
             else
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg),
                   itemCount: kNumSlots,
                   itemBuilder: (_, i) {
                     final meta = _slots![i];
                     return _SlotCard(
                       meta: meta,
                       onTap: () => _selectSlot(i, meta.isEmpty),
-                      onDelete: meta.isEmpty
-                          ? null
-                          : () => _deleteSlot(i),
+                      onDelete: meta.isEmpty ? null : () => _deleteSlot(i),
                     );
                   },
                 ),
               ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.xl),
           ],
         ),
       ),
@@ -143,9 +156,9 @@ class _SlotPickerScreenState extends State<SlotPickerScreen> {
   }
 }
 
-// ── Slot card widget ───────────────────────────────────────
+// ── Slot card ──────────────────────────────────────────────────
 
-class _SlotCard extends StatelessWidget {
+class _SlotCard extends StatefulWidget {
   final SaveSlotMeta meta;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
@@ -157,97 +170,142 @@ class _SlotCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final lastSavedStr = meta.lastSaved != null
-        ? _formatDate(meta.lastSaved!)
-        : null;
+  State<_SlotCard> createState() => _SlotCardState();
+}
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      color: const Color(0xFF1A1A2E),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: meta.isEmpty
-              ? Colors.white12
-              : const Color(0xFF64B5F6).withOpacity(0.5),
-          width: 1,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // ── Slot icon ──────────────────────────────
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: meta.isEmpty
-                      ? Colors.white10
-                      : const Color(0xFF1565C0),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    meta.isEmpty ? '➕' : '🏙️',
-                    style: const TextStyle(fontSize: 24),
+class _SlotCardState extends State<_SlotCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 200),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.97).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = widget.meta;
+    final lastSavedStr =
+        meta.lastSaved != null ? _formatDate(meta.lastSaved!) : null;
+    final accentColor =
+        meta.isEmpty ? AppColors.border : AppColors.selected;
+
+    return GestureDetector(
+      onTapDown: (_) => _ctrl.forward(),
+      onTapUp: (_) {
+        _ctrl.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _ctrl.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (_, child) =>
+            Transform.scale(scale: _scale.value, child: child),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppRadius.cardRadius,
+            border: Border.all(
+              color: meta.isEmpty
+                  ? AppColors.border
+                  : AppColors.selected.withOpacity(0.4),
+              width: 1,
+            ),
+            boxShadow: AppShadows.card,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              children: [
+                // Icon
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.12),
+                    borderRadius: AppRadius.cardRadius,
+                    border: Border.all(
+                        color: accentColor.withOpacity(0.3), width: 1),
+                  ),
+                  child: Center(
+                    child: Text(
+                      meta.isEmpty ? '➕' : '🏙️',
+                      style: const TextStyle(fontSize: 24),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 14),
+                const SizedBox(width: AppSpacing.md),
 
-              // ── Slot info ──────────────────────────────
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      meta.isEmpty
-                          ? 'Empty Slot ${meta.slot + 1}'
-                          : meta.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (meta.isEmpty)
-                      const Text(
-                        'Tap to start a new city',
-                        style: TextStyle(
-                            color: Colors.white38, fontSize: 12),
-                      )
-                    else ...[
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        '🏗️ ${meta.buildingCount} buildings  •  👥 ${meta.population} pop',
-                        style: const TextStyle(
-                            color: Colors.white60, fontSize: 12),
+                        meta.isEmpty
+                            ? 'Empty Slot ${meta.slot + 1}'
+                            : meta.name,
+                        style: AppText.headingSmall
+                            .copyWith(color: AppColors.textPrimary),
                       ),
-                      if (lastSavedStr != null)
+                      const SizedBox(height: 3),
+                      if (meta.isEmpty)
                         Text(
-                          'Last saved: $lastSavedStr',
-                          style: const TextStyle(
-                              color: Colors.white38, fontSize: 11),
+                          'Tap to start a new city',
+                          style: AppText.caption,
+                        )
+                      else ...[
+                        Text(
+                          '🏗️ ${meta.buildingCount} buildings  ·  👥 ${meta.population} pop',
+                          style: AppText.caption.copyWith(
+                              color: AppColors.textSecondary),
                         ),
+                        if (lastSavedStr != null)
+                          Text(
+                            'Saved $lastSavedStr',
+                            style: AppText.caption,
+                          ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
 
-              // ── Delete button ──────────────────────────
-              if (onDelete != null)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      color: Colors.redAccent, size: 20),
-                  onPressed: onDelete,
-                  tooltip: 'Delete save',
-                ),
-            ],
+                // Delete button
+                if (widget.onDelete != null)
+                  GestureDetector(
+                    onTap: widget.onDelete,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppColors.danger.withOpacity(0.10),
+                        borderRadius: AppRadius.cardRadius,
+                        border: Border.all(
+                            color: AppColors.danger.withOpacity(0.3),
+                            width: 1),
+                      ),
+                      child: const Icon(Icons.delete_outline,
+                          color: AppColors.danger, size: 16),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -255,9 +313,8 @@ class _SlotCard extends StatelessWidget {
   }
 
   String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return 'Just now';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';

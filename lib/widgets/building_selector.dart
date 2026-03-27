@@ -1,260 +1,89 @@
 // ============================================================
-// building_selector.dart
-// Bottom panel showing all placeable buildings split into
-// Tier 1 (always available) and Tier 2 (requires a Tier-1
-// building on the map first).
+// building_selector.dart  (redesigned)
+// Bottom build panel — horizontal-scrolling cards for each
+// building type, grouped into Tier 1 and Tier 2 tabs.
 //
-// Tier-2 buildings show a lock icon and the requirement label
-// when their dependency is not yet met.
+// Each card shows:
+//   • Large emoji icon
+//   • Building name
+//   • Placement costs (credits + optional food/power)
+//   • Lock indicator for Tier-2 buildings not yet unlocked
+//   • Scale-down animation on tap
+//   • Selected state with accent border + background tint
 // ============================================================
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/building_type.dart';
 import '../providers/game_provider.dart';
+import '../theme/app_theme.dart';
 
-class BuildingSelector extends StatefulWidget {
+// Tier-1 and Tier-2 building lists (excluding 'empty')
+const _tier1 = [
+  BuildingType.house,
+  BuildingType.farm,
+  BuildingType.powerPlant,
+];
+
+const _tier2 = [
+  BuildingType.market,
+  BuildingType.barracks,
+  BuildingType.researchLab,
+];
+
+class BuildingSelector extends StatelessWidget {
   const BuildingSelector({super.key});
-
-  @override
-  State<BuildingSelector> createState() => _BuildingSelectorState();
-}
-
-class _BuildingSelectorState extends State<BuildingSelector>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GameProvider>();
+
+    // Hide when a tile is selected (upgrade panel takes over)
     if (provider.selectedTile != null) return const SizedBox.shrink();
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF212121),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.5),
-            blurRadius: 6,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── Tab bar ────────────────────────────────────
-          TabBar(
-            controller: _tabController,
-            indicatorColor: const Color(0xFF64B5F6),
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white38,
-            tabs: const [
-              Tab(text: '🏗️ Tier 1'),
-              Tab(text: '⭐ Tier 2'),
-            ],
-          ),
-
-          // ── Tab content ────────────────────────────────
-          SizedBox(
-            height: 130,
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _BuildingRow(
-                    buildings: tier1Buildings, provider: provider),
-                _BuildingRow(
-                    buildings: tier2Buildings, provider: provider),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Row of building buttons ────────────────────────────────
-
-class _BuildingRow extends StatelessWidget {
-  final List<BuildingType> buildings;
-  final GameProvider provider;
-
-  const _BuildingRow(
-      {required this.buildings, required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: buildings.map((type) {
-          final baseCfg = levelConfig(type, 0);
-          final meta = buildingConfigs[type]!;
-          final isSelected = provider.selectedBuilding == type;
-          final isUnlocked = provider.isTierUnlocked(type);
-          final r = provider.resources;
-
-          final canAfford = r.credits >= baseCfg.creditCost &&
-              (baseCfg.foodCost == 0 || r.food >= baseCfg.foodCost) &&
-              (baseCfg.powerCost == 0 || r.power >= baseCfg.powerCost);
-
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 3),
-              child: _BuildingButton(
-                baseCfg: baseCfg,
-                meta: meta,
-                type: type,
-                isSelected: isSelected,
-                isUnlocked: isUnlocked,
-                canAfford: canAfford,
-                onTap: () => provider.selectBuilding(type),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-// ── Individual building button ─────────────────────────────
-
-class _BuildingButton extends StatelessWidget {
-  final BuildingLevelConfig baseCfg;
-  final BuildingConfig meta;
-  final BuildingType type;
-  final bool isSelected;
-  final bool isUnlocked;
-  final bool canAfford;
-  final VoidCallback onTap;
-
-  const _BuildingButton({
-    required this.baseCfg,
-    required this.meta,
-    required this.type,
-    required this.isSelected,
-    required this.isUnlocked,
-    required this.canAfford,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = meta.baseColor;
-    final reqType = tierRequirement(type);
-    final reqName =
-        reqType != null ? buildingConfigs[reqType]!.name : null;
-
-    return GestureDetector(
-      onTap: isUnlocked ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-        decoration: BoxDecoration(
-          color: !isUnlocked
-              ? Colors.white.withOpacity(0.04)
-              : isSelected
-                  ? color.withOpacity(0.9)
-                  : color.withOpacity(0.22),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: !isUnlocked
-                ? Colors.white12
-                : isSelected
-                    ? color
-                    : Colors.white24,
-            width: isSelected ? 2 : 1,
-          ),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(color: AppColors.border, width: 1),
         ),
+      ),
+      child: DefaultTabController(
+        length: 2,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                Text(
-                  baseCfg.emoji,
-                  style: TextStyle(
-                    fontSize: 20,
-                    color: isUnlocked ? null : null,
-                  ),
-                ),
-                if (!isUnlocked)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: Colors.black87,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Icon(Icons.lock,
-                          size: 10, color: Colors.white54),
-                    ),
-                  ),
+            // ── Tab bar ──────────────────────────────────────
+            const TabBar(
+              indicatorColor: AppColors.selected,
+              indicatorWeight: 2,
+              labelColor: AppColors.selected,
+              unselectedLabelColor: AppColors.textMuted,
+              labelStyle: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+              unselectedLabelStyle: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+              tabs: [
+                Tab(text: 'TIER 1'),
+                Tab(text: 'TIER 2  ⭐'),
               ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              meta.name,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isUnlocked
-                    ? (isSelected ? Colors.white : Colors.white70)
-                    : Colors.white24,
-                fontSize: 10,
-                fontWeight: isSelected
-                    ? FontWeight.bold
-                    : FontWeight.normal,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 3),
-            if (!isUnlocked && reqName != null)
-              Text(
-                'Needs $reqName',
-                style: const TextStyle(
-                    color: Colors.redAccent, fontSize: 8),
-                textAlign: TextAlign.center,
-              )
-            else
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 2,
+
+            // ── Building card rows ────────────────────────────
+            SizedBox(
+              height: 108,
+              child: TabBarView(
                 children: [
-                  _CostBadge('💰${baseCfg.creditCost}'),
-                  if (baseCfg.foodCost > 0)
-                    _CostBadge('🌾${baseCfg.foodCost}'),
-                  if (baseCfg.powerCost > 0)
-                    _CostBadge('⚡${baseCfg.powerCost}'),
+                  _BuildingRow(buildings: _tier1, provider: provider),
+                  _BuildingRow(buildings: _tier2, provider: provider),
                 ],
               ),
-            if (isUnlocked && !canAfford)
-              const Text(
-                'Can\'t afford',
-                style: TextStyle(
-                    color: Colors.redAccent,
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold),
-              ),
+            ),
           ],
         ),
       ),
@@ -262,22 +91,232 @@ class _BuildingButton extends StatelessWidget {
   }
 }
 
-class _CostBadge extends StatelessWidget {
+// ── Horizontal scrolling row of building cards ─────────────────
+
+class _BuildingRow extends StatelessWidget {
+  final List<BuildingType> buildings;
+  final GameProvider provider;
+
+  const _BuildingRow({required this.buildings, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      itemCount: buildings.length,
+      separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
+      itemBuilder: (_, i) {
+        final type = buildings[i];
+        final lvl0 = levelConfig(type, 0);
+        final r = provider.resources;
+        final canAfford = r.credits >= lvl0.creditCost &&
+            r.food >= lvl0.foodCost &&
+            r.power >= lvl0.powerCost;
+
+        return _BuildCard(
+          type: type,
+          isSelected: provider.selectedBuilding == type,
+          isLocked: !provider.isTierUnlocked(type),
+          canAfford: canAfford,
+          onTap: () => provider.selectBuilding(type),
+        );
+      },
+    );
+  }
+}
+
+// ── Individual build card ──────────────────────────────────────
+
+class _BuildCard extends StatefulWidget {
+  final BuildingType type;
+  final bool isSelected;
+  final bool isLocked;
+  final bool canAfford;
+  final VoidCallback onTap;
+
+  const _BuildCard({
+    required this.type,
+    required this.isSelected,
+    required this.isLocked,
+    required this.canAfford,
+    required this.onTap,
+  });
+
+  @override
+  State<_BuildCard> createState() => _BuildCardState();
+}
+
+class _BuildCardState extends State<_BuildCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 200),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.92).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Color get _accentColor {
+    switch (widget.type) {
+      case BuildingType.house:       return AppColors.house;
+      case BuildingType.farm:        return AppColors.farm;
+      case BuildingType.powerPlant:  return AppColors.powerPlant;
+      case BuildingType.market:      return AppColors.market;
+      case BuildingType.barracks:    return AppColors.barracks;
+      case BuildingType.researchLab: return AppColors.researchLab;
+      default:                       return AppColors.selected;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cfg = buildingConfigs[widget.type]!;
+    final lvl0 = levelConfig(widget.type, 0);
+    final isSelected = widget.isSelected;
+    final isLocked = widget.isLocked;
+    final canAfford = widget.canAfford && !isLocked;
+    final accent = _accentColor;
+
+    return GestureDetector(
+      onTapDown: (_) => _ctrl.forward(),
+      onTapUp: (_) {
+        _ctrl.reverse();
+        if (!isLocked) widget.onTap();
+      },
+      onTapCancel: () => _ctrl.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (_, child) =>
+            Transform.scale(scale: _scale.value, child: child),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          width: 90,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? accent.withOpacity(0.18)
+                : AppColors.surfaceLight,
+            borderRadius: AppRadius.cardRadius,
+            border: Border.all(
+              color: isSelected
+                  ? accent
+                  : canAfford
+                      ? AppColors.border
+                      : AppColors.border.withOpacity(0.4),
+              width: isSelected ? 1.5 : 1.0,
+            ),
+            boxShadow: isSelected ? AppShadows.elevated : AppShadows.subtle,
+          ),
+          child: Opacity(
+            opacity: isLocked ? 0.45 : (canAfford ? 1.0 : 0.65),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Emoji icon
+                  Text(lvl0.emoji, style: const TextStyle(fontSize: 22)),
+                  const SizedBox(height: 4),
+
+                  // Building name
+                  Text(
+                    cfg.name,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? accent : AppColors.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Cost chips or lock indicator
+                  if (!isLocked)
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 2,
+                      runSpacing: 2,
+                      children: [
+                        _CostChip(
+                            label: '${lvl0.creditCost}💰',
+                            color: AppColors.credits),
+                        if (lvl0.foodCost > 0)
+                          _CostChip(
+                              label: '${lvl0.foodCost}🌾',
+                              color: AppColors.food),
+                        if (lvl0.powerCost > 0)
+                          _CostChip(
+                              label: '${lvl0.powerCost}⚡',
+                              color: AppColors.power),
+                      ],
+                    )
+                  else
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.lock_outline,
+                            size: 10, color: AppColors.textMuted),
+                        const SizedBox(width: 2),
+                        const Text(
+                          'Locked',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Small cost chip ────────────────────────────────────────────
+
+class _CostChip extends StatelessWidget {
   final String label;
-  const _CostBadge(this.label);
+  final Color color;
+  const _CostChip({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
-        color: Colors.black38,
-        borderRadius: BorderRadius.circular(4),
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: color.withOpacity(0.3), width: 0.5),
       ),
       child: Text(
         label,
-        style: const TextStyle(
-            color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w600,
+          fontSize: 9,
+        ),
       ),
     );
   }

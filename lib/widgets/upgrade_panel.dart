@@ -1,12 +1,12 @@
 // ============================================================
-// upgrade_panel.dart
-// Slide-up panel shown when the player taps an occupied tile.
+// upgrade_panel.dart  (redesigned)
+// Modern slide-up panel shown when the player taps an occupied
+// tile. Uses the AppColors/AppText/AppRadius design system.
 //
 // Displays:
-//   • Building name, current level, and current stats
-//   • Upgrade button with ALL costs (credits + food + power)
-//     and population requirement badges
-//   • A 3-step level progress bar
+//   • Building name, current level name, and production stats
+//   • 3-step level progress dots
+//   • Upgrade button with cost badges (green = met, red = not)
 //   • Demolish button
 // ============================================================
 
@@ -15,10 +15,10 @@ import 'package:provider/provider.dart';
 import '../models/building_type.dart';
 import '../models/tile.dart';
 import '../providers/game_provider.dart';
+import '../theme/app_theme.dart';
 
 class UpgradePanel extends StatelessWidget {
   final Tile tile;
-
   const UpgradePanel({super.key, required this.tile});
 
   @override
@@ -31,12 +31,13 @@ class UpgradePanel extends StatelessWidget {
     final max = maxLevel(type);
     final currentCfg = levelConfig(type, currentLevel);
     final buildingName = buildingConfigs[type]!.name;
-    final baseColor = buildingConfigs[type]!.baseColor;
+
+    // Accent color per building type
+    final accent = _accentFor(type);
 
     final bool canUpgrade = currentLevel < max;
     final nextCfg = canUpgrade ? levelConfig(type, currentLevel + 1) : null;
 
-    // Check each requirement individually for granular badge colours.
     final bool meetsPopulation =
         nextCfg != null && r.population >= nextCfg.populationRequired;
     final bool meetsCredits =
@@ -52,155 +53,199 @@ class UpgradePanel extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A237E).withOpacity(0.97),
-        border: Border(
-          top: BorderSide(color: baseColor.withOpacity(0.6), width: 2),
+        color: AppColors.surface,
+        border: const Border(
+          top: BorderSide(color: AppColors.border, width: 1),
         ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header row ──────────────────────────────────
-          Row(
-            children: [
-              Text(currentCfg.emoji,
-                  style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          // Accent top stripe
+          Container(
+            height: 3,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [accent.withOpacity(0.0), accent, accent.withOpacity(0.0)],
+              ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.md),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header row ────────────────────────────────
+                Row(
                   children: [
-                    Text(
-                      '$buildingName — ${currentCfg.levelName}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                    // Emoji in a rounded container
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.15),
+                        borderRadius: AppRadius.cardRadius,
+                        border: Border.all(
+                            color: accent.withOpacity(0.4), width: 1),
+                      ),
+                      child: Center(
+                        child: Text(currentCfg.emoji,
+                            style: const TextStyle(fontSize: 22)),
                       ),
                     ),
-                    Text(
-                      _statsLine(currentCfg),
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 11),
+                    const SizedBox(width: AppSpacing.sm),
+
+                    // Name + stats
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$buildingName  ·  ${currentCfg.levelName}',
+                            style: AppText.headingSmall
+                                .copyWith(color: AppColors.textPrimary),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _statsLine(currentCfg),
+                            style: AppText.caption
+                                .copyWith(color: AppColors.textSecondary),
+                          ),
+                          Text(
+                            '🔧 ${currentCfg.upkeepPerTick}💰/tick upkeep',
+                            style: AppText.caption
+                                .copyWith(color: AppColors.textMuted),
+                          ),
+                        ],
+                      ),
                     ),
-                    Text(
-                      '🔧 Upkeep: ${currentCfg.upkeepPerTick} 💰/tick',
-                      style: const TextStyle(
-                          color: Colors.white38, fontSize: 10),
+
+                    // Close button
+                    GestureDetector(
+                      onTap: () =>
+                          provider.selectBuilding(provider.selectedBuilding),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceLight,
+                          borderRadius: AppRadius.cardRadius,
+                        ),
+                        child: const Icon(Icons.close,
+                            size: 14, color: AppColors.textMuted),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close,
-                    color: Colors.white54, size: 18),
-                onPressed: () =>
-                    provider.selectBuilding(provider.selectedBuilding),
-                tooltip: 'Close',
-              ),
-            ],
-          ),
 
-          const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
 
-          // ── Level progress bar ───────────────────────────
-          _LevelProgressBar(
-            currentLevel: currentLevel,
-            maxLevel: max,
-            baseColor: baseColor,
-          ),
+                // ── Level progress dots ───────────────────────
+                _LevelDots(
+                    currentLevel: currentLevel,
+                    maxLevel: max,
+                    accent: accent),
 
-          const SizedBox(height: 10),
+                const SizedBox(height: AppSpacing.sm),
 
-          // ── Action buttons row ───────────────────────────
-          Row(
-            children: [
-              if (canUpgrade)
-                Expanded(
-                  child: _UpgradeButton(
-                    nextCfg: nextCfg!,
-                    enabled: upgradeEnabled,
-                    meetsPopulation: meetsPopulation,
-                    meetsCredits: meetsCredits,
-                    meetsFood: meetsFood,
-                    meetsPower: meetsPower,
-                    onTap: () =>
-                        provider.upgradeTile(tile.row, tile.col),
-                  ),
-                )
-              else
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white10,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        '✅ Max Level Reached',
-                        style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold),
+                // ── Action buttons ────────────────────────────
+                Row(
+                  children: [
+                    if (canUpgrade)
+                      Expanded(
+                        child: _UpgradeButton(
+                          nextCfg: nextCfg!,
+                          accent: accent,
+                          enabled: upgradeEnabled,
+                          meetsPopulation: meetsPopulation,
+                          meetsCredits: meetsCredits,
+                          meetsFood: meetsFood,
+                          meetsPower: meetsPower,
+                          onTap: () =>
+                              provider.upgradeTile(tile.row, tile.col),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: Container(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: accent.withOpacity(0.10),
+                            borderRadius: AppRadius.cardRadius,
+                            border: Border.all(
+                                color: accent.withOpacity(0.3), width: 1),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.verified,
+                                  size: 14, color: accent),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Max Level',
+                                style: AppText.labelBold
+                                    .copyWith(color: accent),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
+
+                    const SizedBox(width: AppSpacing.sm),
+
+                    // Demolish button
+                    _DemolishButton(
+                      onTap: () =>
+                          provider.demolishTile(tile.row, tile.col),
                     ),
-                  ),
+                  ],
                 ),
-
-              const SizedBox(width: 8),
-
-              SizedBox(
-                width: 90,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade900,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                  icon: const Icon(Icons.delete_outline,
-                      size: 14, color: Colors.white),
-                  label: const Text('Demolish',
-                      style: TextStyle(
-                          color: Colors.white, fontSize: 11)),
-                  onPressed: () =>
-                      provider.demolishTile(tile.row, tile.col),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
+  Color _accentFor(BuildingType type) {
+    switch (type) {
+      case BuildingType.house:       return AppColors.house;
+      case BuildingType.farm:        return AppColors.farm;
+      case BuildingType.powerPlant:  return AppColors.powerPlant;
+      case BuildingType.market:      return AppColors.market;
+      case BuildingType.barracks:    return AppColors.barracks;
+      case BuildingType.researchLab: return AppColors.researchLab;
+      default:                       return AppColors.selected;
+    }
+  }
+
   String _statsLine(BuildingLevelConfig cfg) {
     final parts = <String>[];
-    if (cfg.foodPerTick > 0) parts.add('+${cfg.foodPerTick} 🌾/tick');
-    if (cfg.powerPerTick > 0) parts.add('+${cfg.powerPerTick} ⚡/tick');
-    if (cfg.populationPerTick > 0)
-      parts.add('+${cfg.populationPerTick} 👥/tick');
-    if (cfg.creditsPerTick > 0)
-      parts.add('+${cfg.creditsPerTick} 💰/tick');
+    if (cfg.foodPerTick > 0) parts.add('+${cfg.foodPerTick}🌾/tick');
+    if (cfg.powerPerTick > 0) parts.add('+${cfg.powerPerTick}⚡/tick');
+    if (cfg.populationPerTick > 0) parts.add('+${cfg.populationPerTick}👥/tick');
+    if (cfg.creditsPerTick > 0) parts.add('+${cfg.creditsPerTick}💰/tick');
     return parts.isEmpty ? 'No production' : parts.join('  ');
   }
 }
 
-// ── Level progress bar ─────────────────────────────────────
+// ── Level progress dots ────────────────────────────────────────
 
-class _LevelProgressBar extends StatelessWidget {
+class _LevelDots extends StatelessWidget {
   final int currentLevel;
   final int maxLevel;
-  final Color baseColor;
+  final Color accent;
 
-  const _LevelProgressBar({
+  const _LevelDots({
     required this.currentLevel,
     required this.maxLevel,
-    required this.baseColor,
+    required this.accent,
   });
 
   @override
@@ -209,12 +254,22 @@ class _LevelProgressBar extends StatelessWidget {
       children: List.generate(maxLevel + 1, (i) {
         final active = i <= currentLevel;
         return Expanded(
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
             margin: const EdgeInsets.symmetric(horizontal: 2),
-            height: 8,
+            height: 6,
             decoration: BoxDecoration(
-              color: active ? baseColor : Colors.white12,
-              borderRadius: BorderRadius.circular(4),
+              color: active ? accent : AppColors.border,
+              borderRadius: AppRadius.pillRadius,
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: accent.withOpacity(0.4),
+                        blurRadius: 4,
+                        spreadRadius: 0,
+                      )
+                    ]
+                  : null,
             ),
           ),
         );
@@ -223,10 +278,11 @@ class _LevelProgressBar extends StatelessWidget {
   }
 }
 
-// ── Upgrade button ─────────────────────────────────────────
+// ── Upgrade button ─────────────────────────────────────────────
 
-class _UpgradeButton extends StatelessWidget {
+class _UpgradeButton extends StatefulWidget {
   final BuildingLevelConfig nextCfg;
+  final Color accent;
   final bool enabled;
   final bool meetsPopulation;
   final bool meetsCredits;
@@ -236,6 +292,7 @@ class _UpgradeButton extends StatelessWidget {
 
   const _UpgradeButton({
     required this.nextCfg,
+    required this.accent,
     required this.enabled,
     required this.meetsPopulation,
     required this.meetsCredits,
@@ -245,105 +302,211 @@ class _UpgradeButton extends StatelessWidget {
   });
 
   @override
+  State<_UpgradeButton> createState() => _UpgradeButtonState();
+}
+
+class _UpgradeButtonState extends State<_UpgradeButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final accent = widget.accent;
+    final enabled = widget.enabled;
+
     return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding:
-            const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        decoration: BoxDecoration(
-          color: enabled
-              ? const Color(0xFF1565C0)
-              : Colors.white.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
+      onTapDown: enabled ? (_) => _ctrl.forward() : null,
+      onTapUp: enabled
+          ? (_) {
+              _ctrl.reverse();
+              widget.onTap();
+            }
+          : null,
+      onTapCancel: () => _ctrl.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (_, child) =>
+            Transform.scale(scale: _scale.value, child: child),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(
+              vertical: 10, horizontal: AppSpacing.sm),
+          decoration: BoxDecoration(
             color: enabled
-                ? const Color(0xFF42A5F5)
-                : Colors.white24,
+                ? accent.withOpacity(0.18)
+                : AppColors.surfaceLight,
+            borderRadius: AppRadius.cardRadius,
+            border: Border.all(
+              color: enabled ? accent : AppColors.border,
+              width: enabled ? 1.5 : 1.0,
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(nextCfg.emoji,
-                    style: const TextStyle(fontSize: 14)),
-                const SizedBox(width: 6),
-                Text(
-                  'Upgrade → ${nextCfg.levelName}',
-                  style: TextStyle(
-                    color: enabled ? Colors.white : Colors.white38,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(widget.nextCfg.emoji,
+                      style: const TextStyle(fontSize: 14)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Upgrade → ${widget.nextCfg.levelName}',
+                    style: AppText.labelBold.copyWith(
+                      color: enabled
+                          ? AppColors.textPrimary
+                          : AppColors.textMuted,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // All cost badges in a wrap row.
-            Wrap(
-              spacing: 5,
-              runSpacing: 3,
-              children: [
-                _RequirementBadge(
-                  label: '💰 ${nextCfg.creditCost}',
-                  met: meetsCredits,
-                ),
-                if (nextCfg.foodCost > 0)
-                  _RequirementBadge(
-                    label: '🌾 ${nextCfg.foodCost}',
-                    met: meetsFood,
-                  ),
-                if (nextCfg.powerCost > 0)
-                  _RequirementBadge(
-                    label: '⚡ ${nextCfg.powerCost}',
-                    met: meetsPower,
-                  ),
-                if (nextCfg.populationRequired > 0)
-                  _RequirementBadge(
-                    label: '👥 ≥${nextCfg.populationRequired}',
-                    met: meetsPopulation,
-                  ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  _ReqBadge(
+                      label: '💰 ${widget.nextCfg.creditCost}',
+                      met: widget.meetsCredits),
+                  if (widget.nextCfg.foodCost > 0)
+                    _ReqBadge(
+                        label: '🌾 ${widget.nextCfg.foodCost}',
+                        met: widget.meetsFood),
+                  if (widget.nextCfg.powerCost > 0)
+                    _ReqBadge(
+                        label: '⚡ ${widget.nextCfg.powerCost}',
+                        met: widget.meetsPower),
+                  if (widget.nextCfg.populationRequired > 0)
+                    _ReqBadge(
+                        label: '👥 ≥${widget.nextCfg.populationRequired}',
+                        met: widget.meetsPopulation),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _RequirementBadge extends StatelessWidget {
-  final String label;
-  final bool met;
+// ── Demolish button ────────────────────────────────────────────
 
-  const _RequirementBadge({required this.label, required this.met});
+class _DemolishButton extends StatefulWidget {
+  final VoidCallback onTap;
+  const _DemolishButton({required this.onTap});
+
+  @override
+  State<_DemolishButton> createState() => _DemolishButtonState();
+}
+
+class _DemolishButtonState extends State<_DemolishButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.92).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: met
-            ? Colors.green.withOpacity(0.3)
-            : Colors.red.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: met
-              ? Colors.green.shade400
-              : Colors.red.shade400,
-          width: 0.5,
+    return GestureDetector(
+      onTapDown: (_) => _ctrl.forward(),
+      onTapUp: (_) {
+        _ctrl.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _ctrl.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (_, child) =>
+            Transform.scale(scale: _scale.value, child: child),
+        child: Container(
+          width: 88,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.danger.withOpacity(0.12),
+            borderRadius: AppRadius.cardRadius,
+            border: Border.all(
+                color: AppColors.danger.withOpacity(0.4), width: 1),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.delete_outline,
+                  size: 14, color: AppColors.danger),
+              const SizedBox(width: 4),
+              Text(
+                'Demolish',
+                style: AppText.labelBold
+                    .copyWith(color: AppColors.danger, fontSize: 11),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Requirement badge ──────────────────────────────────────────
+
+class _ReqBadge extends StatelessWidget {
+  final String label;
+  final bool met;
+  const _ReqBadge({required this.label, required this.met});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = met ? AppColors.food : AppColors.danger;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: AppRadius.pillRadius,
+        border: Border.all(color: color.withOpacity(0.4), width: 0.5),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: met ? Colors.greenAccent : Colors.redAccent,
+          color: color,
           fontSize: 10,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

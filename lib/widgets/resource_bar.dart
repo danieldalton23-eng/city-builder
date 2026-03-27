@@ -1,17 +1,12 @@
 // ============================================================
-// resource_bar.dart
-// Top status bar showing all four resource counters.
-//
-// New in this version:
-//   • Food and Power show a fill bar indicating proximity to cap (200).
-//   • Food turns red when in crisis (≤ 0).
-//   • Power turns red when in crisis (≤ 0).
-//   • A ⚠️ warning badge appears next to a resource in crisis.
-//   • Near-cap resources turn amber to warn the player to build more.
+// resource_bar.dart  (redesigned)
+// Modern resource bar with rounded cards, colored fill bars,
+// emoji icons, and smooth animated number transitions.
 // ============================================================
 
 import 'package:flutter/material.dart';
 import '../models/resources.dart';
+import '../theme/app_theme.dart';
 
 class ResourceBar extends StatelessWidget {
   final Resources resources;
@@ -20,44 +15,44 @@ class ResourceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A237E),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      color: AppColors.background,
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
       child: Row(
         children: [
-          _ResourceTile(
+          _ResourceCard(
             icon: '💰',
-            label: 'Credits',
+            label: 'CREDITS',
             value: resources.credits,
+            color: AppColors.credits,
+            fillFraction: (resources.credits / 500).clamp(0.0, 1.0),
             isCrisis: false,
           ),
-          _ResourceTile(
+          const SizedBox(width: AppSpacing.xs),
+          _ResourceCard(
             icon: '🌾',
-            label: 'Food',
+            label: 'FOOD',
             value: resources.food,
-            cap: kFoodCap,
+            color: AppColors.food,
+            fillFraction: (resources.food / kFoodCap).clamp(0.0, 1.0),
             isCrisis: resources.isFoodCrisis,
           ),
-          _ResourceTile(
+          const SizedBox(width: AppSpacing.xs),
+          _ResourceCard(
             icon: '⚡',
-            label: 'Power',
+            label: 'POWER',
             value: resources.power,
-            cap: kPowerCap,
+            color: AppColors.power,
+            fillFraction: (resources.power / kPowerCap).clamp(0.0, 1.0),
             isCrisis: resources.isPowerCrisis,
           ),
-          _ResourceTile(
+          const SizedBox(width: AppSpacing.xs),
+          _ResourceCard(
             icon: '👥',
-            label: 'Pop',
+            label: 'POP',
             value: resources.population,
+            color: AppColors.population,
+            fillFraction: (resources.population / 200).clamp(0.0, 1.0),
             isCrisis: false,
           ),
         ],
@@ -66,90 +61,157 @@ class ResourceBar extends StatelessWidget {
   }
 }
 
-class _ResourceTile extends StatelessWidget {
+// ── Individual resource card ───────────────────────────────────
+
+class _ResourceCard extends StatelessWidget {
   final String icon;
   final String label;
   final int value;
-  final int? cap;
+  final Color color;
+  final double fillFraction;
   final bool isCrisis;
 
-  const _ResourceTile({
+  const _ResourceCard({
     required this.icon,
     required this.label,
     required this.value,
+    required this.color,
+    required this.fillFraction,
     required this.isCrisis,
-    this.cap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fillFraction =
-        cap != null ? (value / cap!).clamp(0.0, 1.0) : null;
-    final isNearCap = fillFraction != null && fillFraction >= 0.9;
-
-    // Colour logic: red in crisis, amber near cap, white otherwise.
-    final textColor = isCrisis
-        ? Colors.red.shade300
-        : isNearCap
-            ? Colors.amber
-            : Colors.white;
+    final effectiveColor = isCrisis ? AppColors.danger : color;
+    final borderColor =
+        isCrisis ? AppColors.danger.withOpacity(0.6) : Colors.transparent;
 
     return Expanded(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── Value row ──────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(icon, style: const TextStyle(fontSize: 14)),
-              const SizedBox(width: 3),
-              Text(
-                cap != null ? '$value/$cap' : '$value',
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-              if (isCrisis) ...[
-                const SizedBox(width: 2),
-                const Text('⚠️', style: TextStyle(fontSize: 10)),
-              ],
-            ],
-          ),
-
-          // ── Fill bar (only for capped resources) ───────
-          if (fillFraction != null) ...[
-            const SizedBox(height: 3),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: LinearProgressIndicator(
-                  value: fillFraction,
-                  minHeight: 4,
-                  backgroundColor: Colors.white12,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    isCrisis
-                        ? Colors.red.shade400
-                        : isNearCap
-                            ? Colors.amber
-                            : Colors.green.shade400,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: AppRadius.cardRadius,
+          border: Border.all(color: borderColor, width: 1.5),
+          boxShadow: AppShadows.card,
+        ),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 6, vertical: AppSpacing.sm),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Icon + animated value
+            Row(
+              children: [
+                Text(icon, style: const TextStyle(fontSize: 13)),
+                const SizedBox(width: 3),
+                Expanded(
+                  child: _AnimatedCounter(
+                    value: value,
+                    color: effectiveColor,
                   ),
                 ),
-              ),
+              ],
             ),
+            const SizedBox(height: 3),
+            // Label
+            Text(label, style: AppText.resourceLabel),
+            const SizedBox(height: 5),
+            // Progress bar track + fill
+            LayoutBuilder(builder: (context, constraints) {
+              return Stack(
+                children: [
+                  Container(
+                    height: 3,
+                    width: constraints.maxWidth,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: AppRadius.pillRadius,
+                    ),
+                  ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    height: 3,
+                    width: constraints.maxWidth * fillFraction.clamp(0.0, 1.0),
+                    decoration: BoxDecoration(
+                      color: isCrisis
+                          ? AppColors.danger
+                          : (fillFraction >= 0.9
+                              ? AppColors.warning
+                              : effectiveColor),
+                      borderRadius: AppRadius.pillRadius,
+                    ),
+                  ),
+                ],
+              );
+            }),
           ],
-
-          // ── Label ──────────────────────────────────────
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white54, fontSize: 9),
-          ),
-        ],
+        ),
       ),
+    );
+  }
+}
+
+// ── Animated number counter ────────────────────────────────────
+
+class _AnimatedCounter extends StatefulWidget {
+  final int value;
+  final Color color;
+  const _AnimatedCounter({required this.value, required this.color});
+
+  @override
+  State<_AnimatedCounter> createState() => _AnimatedCounterState();
+}
+
+class _AnimatedCounterState extends State<_AnimatedCounter>
+    with SingleTickerProviderStateMixin {
+  late int _displayed;
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+  int _target = 0;
+  int _from = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayed = widget.value;
+    _target = widget.value;
+    _from = widget.value;
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _anim.addListener(() {
+      setState(() {
+        _displayed = (_from + (_target - _from) * _anim.value).round();
+      });
+    });
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedCounter old) {
+    super.didUpdateWidget(old);
+    if (old.value != widget.value) {
+      _from = _displayed;
+      _target = widget.value;
+      _ctrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _displayed.toString(),
+      style: AppText.resourceNumber.copyWith(color: widget.color),
+      overflow: TextOverflow.ellipsis,
     );
   }
 }

@@ -9,7 +9,6 @@
 //                 └─ SlotPickerScreen  (launch screen)
 //                       └─ GameScreen (after slot selection)
 //                             ├─ ResourceBar
-//                             ├─ TickIndicator
 //                             ├─ CityGrid
 //                             ├─ BuildingSelector (Tier 1 + Tier 2 tabs)
 //                             └─ UpgradePanel (when tile selected)
@@ -21,6 +20,7 @@
 //
 // State management: provider package (ChangeNotifier pattern)
 // Persistence:      shared_preferences (JSON, 3 slots)
+// Design system:    lib/theme/app_theme.dart
 // ============================================================
 
 import 'package:flutter/material.dart';
@@ -28,11 +28,12 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/game_provider.dart';
 import 'screens/slot_picker_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Lock to portrait for the best grid experience.
+  // Lock to portrait for the best grid experience on mobile.
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -47,21 +48,13 @@ class CityBuilderApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      // Create provider but do NOT call init() here —
-      // init() is called after the player picks a slot.
-      create: (context) => GameProvider(),
+      // Provider is created here but init() is called only after
+      // the player selects a save slot in SlotPickerScreen.
+      create: (_) => GameProvider(),
       child: MaterialApp(
         title: 'CityBuilder',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData.dark().copyWith(
-          scaffoldBackgroundColor: const Color(0xFF1B1B2F),
-          colorScheme: const ColorScheme.dark(
-            primary: Color(0xFF64B5F6),
-            secondary: Color(0xFFFFD700),
-          ),
-        ),
-        // Start at the slot picker so the player always chooses
-        // which city to load or create.
+        theme: AppTheme.theme,
         home: const SlotPickerScreen(),
       ),
     );
