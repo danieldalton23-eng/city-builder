@@ -92,6 +92,7 @@ class GameProvider extends ChangeNotifier {
     _selectedRow = null;
     _selectedCol = null;
     _resourceHistory.clear();
+    _isLoading = false; // Ensure GameScreen renders after slot selection.
     _startTick();
     notifyListeners();
   }
@@ -106,6 +107,7 @@ class GameProvider extends ChangeNotifier {
     _selectedRow = null;
     _selectedCol = null;
     _resourceHistory.clear();
+    _isLoading = false; // Ensure GameScreen renders after slot selection.
     _startTick();
     _setMessage('New city started in Slot ${slot + 1}!');
     notifyListeners();
